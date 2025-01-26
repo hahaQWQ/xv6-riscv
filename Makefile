@@ -273,8 +273,8 @@ ifeq ($(LAB),util)
 endif
 
 
-fs.img: mkfs/mkfs README $(UEXTRA) $(UPROGS)
-	mkfs/mkfs fs.img README $(UEXTRA) $(UPROGS)
+fs.img: mkfs/mkfs README test.txt $(UEXTRA) $(UPROGS)
+	mkfs/mkfs fs.img README test.txt $(UEXTRA) $(UPROGS)
 
 -include kernel/*.d user/*.d
 
