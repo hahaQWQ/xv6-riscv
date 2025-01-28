@@ -1,0 +1,6 @@
+usertrap
+7
+0x200000022
+a3
+inticode
+1
