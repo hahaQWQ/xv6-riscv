@@ -16,3 +16,6 @@ A most important pieces of kernel state are its page tables.
 the loader loads the xv6 kernel into memory at physical address 0x80000000. the reason it places the kernel at 0x80000000 rather than 0x0 is because the address range 0x0:0x80000000 contains I/O devices.
 
 the desired system call.
+
+
+uservec -> usertrap() -> syscall -> 
