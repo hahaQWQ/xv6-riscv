@@ -1,138 +1,98 @@
 #include "kernel/types.h"
 #include "user/user.h"
 #include "kernel/param.h"  // For MAXARG
-#define NULL 0
-char** split_command(char* cmd, int* count)
+
+
+int get_cmd(char*buf, int sz)
 {
-    int cmd_count = 0;
-    char* temp = cmd;
-    while (*temp) {
-        while (*temp == ' ') {
-            temp++;
-        }
-        if (*temp == '\0') {
-            break;
-        }
-        cmd_count++;
-        while (*temp != ' ' && *temp != '\0') {
-            temp++;
-        }
-    }
+    memset(buf,0,sz);
+    int i, cc;
+    char c;
 
-    char** args = (char**)malloc(sizeof(char*) * (cmd_count + 1));
-    if (args == NULL) {
-        return NULL;
-    }
-
-    temp = cmd;
-    int idx = 0;
-    while (*temp) {
-        while (*temp == ' ') {
-            temp++;
-        }
-        if (*temp == '\0') {
+    for(i=0; i+1 < sz; ){
+        cc = read(0, &c, 1);
+        if(cc < 1)
             break;
-        }
-        char* start = temp;
-        while (*temp != ' ' && *temp != '\0') {
-            temp++;
-        }
-        int len = temp - start;
-        args[idx] = (char*)malloc(sizeof(char) * (len + 1));
-        if (args[idx] == NULL) {
-            // Free previously allocated memory on failure.
-            for (int i = 0; i < idx; i++) {
-                free(args[i]);
-            }
-            free(args);
-            return NULL;
-        }
-        memcpy(args[idx], start, len);
-        args[idx][len] = '\0';
-        idx++;
+        buf[i++] = c;
+        if(c == '\n' || c == '\r')
+            break;
     }
-    args[cmd_count] = 0;
-    *count = cmd_count;
-    return args;
+    // fix last char bug
+    buf[--i] = '\0';
+    if(buf[0]=='\0') return 0;
+    return 1;
 }
 
-int main(int argc, char* argv[])
+void test_exec(char* e,char** args)
 {
-    if (argc < 2) {
-        fprintf(2, "Usage: xargs command [args...]\n");
+    printf("execute : '%s'\n",e);
+    for(int i=0;i<MAXARG;i++)
+    {
+        if(args[i]==0)
+        {
+            break;
+        }
+        printf("args[%d] : %s\n",i,args[i]);
+    }
+    exec(e,args);
+}
+
+int main(int argc,char** argv)
+{
+    int executable_idx = 1;
+    int num_of_per_cmd = 1;
+    int i = 0;
+    int j = 0;
+    char buffer[512];
+    char* p;
+    char* s;
+    char *executable_argv[MAXARG];
+    int num_flag = 0;
+    
+    if(argc < 2)
+    {
+        fprintf(2,"usage: xargs [-n:int] cmd ...args\n");
         exit(1);
     }
-
-    char buf[512];
-    int c = read(0, buf, sizeof(buf));
-    if (c < 0) {
-        fprintf(2, "xargs: read error\n");
-        exit(1);
+    //      0        1   2    3
+    // {xargs path, -n, num, cmd}
+    if(strcmp(argv[1],"-n")==0 && argc>2)
+    {
+        num_of_per_cmd = atoi(argv[2]);
+        executable_idx = 3;
+        num_flag = 1;
     }
-    if (c == 0) {
-        exit(0);  // No input.
+    for (i = executable_idx; i < argc; i++)
+    {
+        executable_argv[i-executable_idx] = argv[i];
     }
-    buf[c - 1] = '\0';  // Replace newline with null terminator.
-
-    int count;
-    char** args = split_command(buf, &count);
-    if (args == NULL) {
-        fprintf(2, "xargs: split_command failed\n");
-        exit(1);
-    }
-
-    int n = 1;  // Default: one argument per command.
-    int exec_idx = 1;  // Index of the command in argv.
-
-    // Parse -n option.
-    if (argc >= 3 && strcmp(argv[1], "-n") == 0) {
-        n = atoi(argv[2]);
-        if (n <= 0) {
-            fprintf(2, "xargs: invalid argument for -n\n");
-            exit(1);
+    
+    while (get_cmd(buffer,sizeof(buffer)))
+    {
+        p = buffer;
+        s = buffer;
+        if(num_flag)
+        {
+            for(j=0;j<num_of_per_cmd;j++)
+            {
+                while (*p!=' ' && *p!='\0') p++;
+                *p= '\0';
+                executable_argv[j+argc-executable_idx] = s;
+                s = ++p;
+            }
+            executable_argv[num_of_per_cmd+argc-executable_idx] = 0;
+        }else{
+            executable_argv[argc-executable_idx]=buffer;
         }
-        exec_idx = 3;
-    }
-
-    // Execute the command for each group of arguments.
-    for (int i = 0; i < count; i += n) {
-        // Allocate memory for the arguments.
-        char** args_exec = (char**)malloc(sizeof(char*) * (MAXARG));
-        if (args_exec == NULL) {
-            fprintf(2, "xargs: malloc failed\n");
-            exit(1);
-        }
-
-        // Copy the command and its arguments.
-        int j;
-        for (j = 0; j < argc - exec_idx; j++) {
-            args_exec[j] = argv[exec_idx + j];
-        }
-
-        // Copy the additional arguments.
-        for (int k = 0; k < n && i + k < count; k++) {
-            args_exec[j + k] = args[i + k];
-        }
-        args_exec[j + n] = 0;  // Null-terminate the array.
-
-        // Fork and execute the command.
-        if (fork() == 0) {
-            exec(args_exec[0], args_exec);
-            fprintf(2, "xargs: exec failed\n");
-            exit(1);
-        } else {
+        
+        if(fork()==0)
+        {
+            exec(executable_argv[0],executable_argv);
+            exit(0);
+        }else{
             wait(0);
         }
-
-        // Free the allocated memory.
-        free(args_exec);
     }
+    
 
-    // Free the allocated memory.
-    for (int i = 0; i < count; i++) {
-        free(args[i]);
-    }
-    free(args);
-
-    exit(0);
 }
