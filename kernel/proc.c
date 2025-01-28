@@ -122,6 +122,7 @@ allocproc(void)
   return 0;
 
 found:
+  p->mask = 0;
   p->pid = allocpid();
   p->state = USED;
 
@@ -295,6 +296,7 @@ fork(void)
     return -1;
   }
   np->sz = p->sz;
+  np->mask = p->mask;
 
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
